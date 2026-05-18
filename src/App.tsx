@@ -196,7 +196,7 @@ export default function App() {
         <div className="planner">
           <aside className="sidebar">
             <div className="sidebar-header">
-              <h2>✨ Velora</h2>
+              <h2>Velora</h2>
               <div className="progress-indicator">{completedCount}/{totalCount}</div>
             </div>
             <section className="sidebar-section">
@@ -460,7 +460,7 @@ export default function App() {
         <div className="welcome-screen">
           <div className="welcome-card">
             <div className="welcome-header">
-              <h1>✨ Velora</h1>
+              <h1>Velora</h1>
               <p>Organize your life around what matters</p>
             </div>
             <div className="welcome-content">
