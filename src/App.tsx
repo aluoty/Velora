@@ -1,13 +1,35 @@
-import { useEffect, type FormEvent } from "react";
+import { useEffect, useState, type DragEvent, type FormEvent } from "react";
 import { usePlanner } from "./usePlanner";
+import { StarsBackground } from "./StarsBackground";
 import { starterInterests } from "./utils";
 import type { Priority, SortMode, Task } from "./types";
 import "./App.css";
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "incomplete", label: "Incomplete first" },
+  { value: "priority", label: "Priority first" },
+  { value: "manual", label: "Manual order" },
+];
+
+const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+function sortModeLabel(mode: SortMode) {
+  return SORT_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
+}
 
 function TaskCard({
   task,
   availableTags,
   editing,
+  manualSort,
+  isDragging,
+  isDropTarget,
   onToggleCompleted,
   onToggleFocus,
   onEdit,
@@ -17,6 +39,11 @@ function TaskCard({
   onEditingTitle,
   onEditingPriority,
   onToggleEditTag,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: {
   task: Task;
   availableTags: string[];
@@ -27,6 +54,9 @@ function TaskCard({
     tags: string[];
     focusPinned: boolean;
   };
+  manualSort: boolean;
+  isDragging: boolean;
+  isDropTarget: boolean;
   onToggleCompleted: (id: string) => void;
   onToggleFocus: (id: string) => void;
   onEdit: (task: Task) => void;
@@ -36,6 +66,11 @@ function TaskCard({
   onEditingTitle: (value: string) => void;
   onEditingPriority: (value: "low" | "medium" | "high") => void;
   onToggleEditTag: (tag: string) => void;
+  onDragStart: (event: DragEvent<HTMLElement>, taskId: string) => void;
+  onDragOver: (event: DragEvent<HTMLElement>, taskId: string) => void;
+  onDragLeave: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>, taskId: string) => void;
+  onDragEnd: () => void;
 }) {
   const priorityLabel = task.priority[0].toUpperCase() + task.priority.slice(1);
   const createdLabel = formatTaskDate(task.createdAt);
@@ -51,13 +86,15 @@ function TaskCard({
             placeholder="Task title..."
           />
           <select
-            className="edit-task-priority"
+            className="theme-select edit-task-priority"
             value={editing.priority}
             onChange={(event) => onEditingPriority(event.target.value as "low" | "medium" | "high")}
           >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+            {PRIORITY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
         <div className="chip-row edit-chip-row">
@@ -84,10 +121,40 @@ function TaskCard({
     );
   }
 
+  const cardClassName = [
+    "task-card",
+    task.completed ? "completed" : "",
+    manualSort ? "draggable" : "",
+    isDragging ? "dragging" : "",
+    isDropTarget ? "drop-target" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <article className={`task-card ${task.completed ? "completed" : ""}`}>
+    <article
+      className={cardClassName}
+      onDragOver={(event) => onDragOver(event, task.id)}
+      onDragLeave={onDragLeave}
+      onDrop={(event) => onDrop(event, task.id)}
+    >
       <div className="task-main">
         <div className="task-leading">
+          {manualSort ? (
+            <button
+              className="drag-handle"
+              type="button"
+              aria-label={`Drag to reorder ${task.title}`}
+              draggable={manualSort}
+              onDragStart={(event) => {
+                event.stopPropagation();
+                onDragStart(event, task.id);
+              }}
+              onDragEnd={onDragEnd}
+            >
+              <span aria-hidden="true">⋮⋮</span>
+            </button>
+          ) : null}
           <button className="task-checkbox" type="button" onClick={() => onToggleCompleted(task.id)} aria-label={task.completed ? "Mark task incomplete" : "Mark task complete"}>
             {task.completed ? "✓" : ""}
           </button>
@@ -156,6 +223,7 @@ export default function App() {
     deleteTask,
     setTaskFilterStatus,
     setSortMode,
+    reorderTasks,
     toggleFilterTag,
     toggleCreateTag,
     toggleEditTag,
@@ -178,6 +246,9 @@ export default function App() {
   const highPriorityCount = persistedState.tasks.filter((task) => task.priority === "high" && !task.completed).length;
   const completionRate = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
   const selectedFilterCount = persistedState.ui.taskFilterTags.length;
+  const manualSort = persistedState.ui.sortMode === "manual";
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!pendingFocusSelector) return;
@@ -190,8 +261,43 @@ export default function App() {
     addTask(drafts.newTask);
   }
 
+  function handleDragStart(event: DragEvent<HTMLElement>, taskId: string) {
+    if (!manualSort) return;
+    setDraggedTaskId(taskId);
+    setDropTargetId(null);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", taskId);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>, taskId: string) {
+    if (!manualSort || !draggedTaskId || draggedTaskId === taskId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropTargetId(taskId);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLElement>) {
+    const next = event.relatedTarget;
+    if (next instanceof Node && event.currentTarget.contains(next)) return;
+    setDropTargetId(null);
+  }
+
+  function handleDrop(event: DragEvent<HTMLElement>, taskId: string) {
+    if (!manualSort || !draggedTaskId) return;
+    event.preventDefault();
+    reorderTasks(draggedTaskId, taskId);
+    setDraggedTaskId(null);
+    setDropTargetId(null);
+  }
+
+  function handleDragEnd() {
+    setDraggedTaskId(null);
+    setDropTargetId(null);
+  }
+
   return (
     <div className="app-shell">
+      <StarsBackground />
       {persistedState.onboardingFinished ? (
         <div className="planner">
           <aside className="sidebar">
@@ -277,7 +383,7 @@ export default function App() {
               <div className="summary-tile">
                 <span className="summary-icon" aria-hidden="true">⌘</span>
                 <div>
-                  <strong>{persistedState.ui.sortMode}</strong>
+                  <strong>{sortModeLabel(persistedState.ui.sortMode)}</strong>
                   <p>Current sort</p>
                 </div>
               </div>
@@ -329,13 +435,26 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <select value={persistedState.ui.sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
-                  <option value="newest">Newest</option>
-                  <option value="oldest">Oldest</option>
-                  <option value="incomplete">Incomplete first</option>
-                  <option value="priority">Priority first</option>
+                <select
+                  className="theme-select"
+                  value={persistedState.ui.sortMode}
+                  onChange={(event) => setSortMode(event.target.value as SortMode)}
+                  aria-label="Sort tasks"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
+
+              {manualSort ? (
+                <p className="manual-sort-hint">
+                  <span className="manual-sort-icon" aria-hidden="true">↕</span>
+                  Drag tasks by the handle to set your custom order.
+                </p>
+              ) : null}
 
               <div className="chip-section">
                 <span>Filter tags</span>
@@ -369,10 +488,17 @@ export default function App() {
                     value={drafts.newTask}
                     onChange={(event) => setDraftTaskTitle(event.target.value)}
                   />
-                  <select value={drafts.newTaskPriority} onChange={(event) => setDraftPriority(event.target.value as Priority)}>
-                    <option value="low">Low priority</option>
-                    <option value="medium">Medium priority</option>
-                    <option value="high">High priority</option>
+                  <select
+                    className="theme-select"
+                    value={drafts.newTaskPriority}
+                    onChange={(event) => setDraftPriority(event.target.value as Priority)}
+                    aria-label="Task priority"
+                  >
+                    {PRIORITY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label} priority
+                      </option>
+                    ))}
                   </select>
                   <button type="submit" className="primary-btn">
                     Add Task
@@ -419,7 +545,7 @@ export default function App() {
               </div>
             </section>
 
-            <section className="task-list">
+            <section className={`task-list ${manualSort ? "task-list--manual" : ""}`}>
               {persistedState.tasks.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-icon">📝</div>
@@ -441,6 +567,9 @@ export default function App() {
                     task={task}
                     availableTags={availableTags}
                     editing={editing}
+                    manualSort={manualSort}
+                    isDragging={draggedTaskId === task.id}
+                    isDropTarget={dropTargetId === task.id}
                     onToggleCompleted={toggleTaskCompleted}
                     onToggleFocus={toggleTaskFocused}
                     onEdit={startEditing}
@@ -450,6 +579,11 @@ export default function App() {
                     onEditingTitle={setEditingTitle}
                     onEditingPriority={setEditingPriority}
                     onToggleEditTag={toggleEditTag}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
                   />
                 ))
               )}

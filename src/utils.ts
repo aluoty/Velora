@@ -64,7 +64,11 @@ export function normalizeTaskFilterStatus(value: unknown): TaskFilterStatus {
 }
 
 export function normalizeSortMode(value: unknown): SortMode {
-  return value === "newest" || value === "oldest" || value === "incomplete" || value === "priority"
+  return value === "newest" ||
+    value === "oldest" ||
+    value === "incomplete" ||
+    value === "priority" ||
+    value === "manual"
     ? value
     : "newest";
 }
@@ -102,6 +106,10 @@ export function sortTasks(tasks: Task[], mode: SortMode) {
 
   if (mode === "incomplete") {
     return ordered.sort((a, b) => Number(a.completed) - Number(b.completed));
+  }
+
+  if (mode === "manual") {
+    return ordered.sort((a, b) => a.order - b.order);
   }
 
   return ordered.sort((a, b) => b.createdAt - a.createdAt);

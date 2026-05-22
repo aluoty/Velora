@@ -268,10 +268,32 @@ export function usePlanner() {
   }
 
   function setSortMode(mode: SortMode) {
+    const normalized = normalizeSortMode(mode);
     updateState((previous) => ({
       ...previous,
-      ui: { ...previous.ui, sortMode: normalizeSortMode(mode) },
+      ui: { ...previous.ui, sortMode: normalized },
+      tasks: normalized === "manual" ? normalizeTaskOrder(previous.tasks) : previous.tasks,
     }));
+  }
+
+  function reorderTasks(fromId: string, toId: string) {
+    if (fromId === toId) return;
+
+    updateState((previous) => {
+      const sorted = [...previous.tasks].sort((left, right) => left.order - right.order);
+      const fromIndex = sorted.findIndex((task) => task.id === fromId);
+      const toIndex = sorted.findIndex((task) => task.id === toId);
+      if (fromIndex < 0 || toIndex < 0) return previous;
+
+      const next = [...sorted];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+
+      return {
+        ...previous,
+        tasks: next.map((task, index) => ({ ...task, order: index })),
+      };
+    });
   }
 
   function toggleFilterTag(tag: string) {
@@ -366,6 +388,7 @@ export function usePlanner() {
     deleteTask,
     setTaskFilterStatus,
     setSortMode,
+    reorderTasks,
     toggleFilterTag,
     toggleCreateTag,
     toggleEditTag,
@@ -388,6 +411,10 @@ function compareRankedTasks(
   focusMode: boolean,
   hasQuery: boolean
 ) {
+  if (sortMode === "manual") {
+    return left.task.order - right.task.order;
+  }
+
   if (hasQuery && left.searchScore !== right.searchScore) {
     return right.searchScore - left.searchScore;
   }

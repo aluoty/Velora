@@ -1,7 +1,7 @@
 export type Priority = "low" | "medium" | "high";
 
 export type TaskFilterStatus = "all" | "active" | "completed";
-export type SortMode = "newest" | "oldest" | "incomplete" | "priority";
+export type SortMode = "newest" | "oldest" | "incomplete" | "priority" | "manual";
 
 export type Task = {
   id: string;

@@ -1,0 +1,57 @@
+.stars-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.stars-nebula {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(ellipse 55% 45% at 15% 20%, rgba(139, 92, 246, 0.18), transparent 60%),
+    radial-gradient(ellipse 40% 35% at 85% 15%, rgba(167, 139, 250, 0.12), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 50% 90%, rgba(91, 63, 168, 0.14), transparent 58%),
+    radial-gradient(ellipse 30% 25% at 70% 60%, rgba(217, 70, 239, 0.06), transparent 50%);
+  animation: nebula-drift 28s ease-in-out infinite alternate;
+}
+
+.stars-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.star {
+  position: absolute;
+  border-radius: 50%;
+  background: #f5f3ff;
+  box-shadow: 0 0 6px 1px rgba(196, 181, 253, 0.45);
+  animation: star-twinkle ease-in-out infinite;
+}
+
+.star--bright {
+  background: #ede9fe;
+  box-shadow: 0 0 10px 2px rgba(167, 139, 250, 0.55);
+}
+
+@keyframes star-twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes nebula-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-2%, 1%, 0) scale(1.03);
+  }
+}
